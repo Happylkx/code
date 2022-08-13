@@ -61,8 +61,8 @@ data = dict(
         type=dataset_type,
         data_source=dict(
             type=data_source,
-            data_prefix='/home/intern/dataset/imagenet/train',
-            ann_file='/home/intern/scratch/likaixin/mmmsn/work_dir/imagenet_meta/train.txt',
+            data_prefix='/home/dqwang/datasets/imagenet/train',
+            ann_file='/home/dqwang/scratch/likaixin/dataset/imagenet_meta/train.txt',
         ),
         num_views=[num_rand_views + 1, num_focal_views],  # MultiViewDataset会自动按顺序对每个pipeline重复指定次
         pipelines=[rand_view_pipeline, focal_view_pipeline],
@@ -105,7 +105,7 @@ model = dict(
         me_max=True,
         me_max_weight=1,
         use_entropy=True,
-        ent_weight=1,
+        ent_weight=0.0,
         use_sinkhorn=True,
     ),
 )
@@ -146,7 +146,7 @@ lr_config = dict(
     warmup='linear',
     warmup_ratio=start_lr / lr,
     warmup_iters=15,  # When by_epoch is set, this means the number of warmup epochs
-    warmup_by_epoch=False)
+    warmup_by_epoch=True)
 
 optimizer = dict(type='AdamW', lr=lr, paramwise_options={
     '.*(bias|bn).*': dict(WD_exclude=True, weight_decay=0),  # len(p.shape)=1怎么办？

@@ -48,6 +48,7 @@ class MSN(BaseModel):
         self.output_dim = output_dim
         self.num_proto = num_proto
         self.freeze_proto = freeze_proto
+        self.sync_batchnorm=sync_batchnorm
         # --------Scheduled Values, injected by MSNHook--------
         self.momentum = None
         self.T = None  # Sharpen
