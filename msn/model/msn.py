@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 
 from mmselfsup.models.builder import ALGORITHMS, build_backbone, build_head, build_neck
-from mmselfsup.models.utils import GatherLayer
 from mmselfsup.models.algorithms.base import BaseModel
 
 
@@ -19,7 +18,7 @@ class MSN(BaseModel):
 
     Args:
         backbone (dict): Config dict for encoder. Defaults to None.
-        neck (dict): Config dict for encoder. Defaults to None.
+        neck (dict): Config dict for neck. Defaults to None.
         head (dict): Config dict for loss functions. Defaults to None.
         init_cfg (dict, optional): Config dict for weight initialization.
             Defaults to None.
@@ -34,11 +33,8 @@ class MSN(BaseModel):
                  patch_drop: float,
                  num_proto: int = 2048,
 
-                 start_sharpen=0.25,
-                 final_sharpen=0.25,
-                 start_momentum=0.996,
-                 final_momentum=1.0,
                  freeze_proto: bool = False,
+                 sync_batchnorm: bool = False,
                  init_cfg: Optional[dict] = None) -> None:
         super(MSN, self).__init__(init_cfg)
         assert backbone is not None
@@ -52,14 +48,9 @@ class MSN(BaseModel):
         self.output_dim = output_dim
         self.num_proto = num_proto
         self.freeze_proto = freeze_proto
-        self.start_sharpen = start_sharpen
-        self.final_sharpen = final_sharpen
-        self.start_momentum = 0.996
-        self.end_momentum = 1.0
-        # --------Scheduled Values--------
-        self.momentum = start_momentum
-        self.T = start_sharpen
-        # momentum_scheduler = (_start_m + (_increment*i) for i in range(int(ipe*num_epochs*1.25)+1))
+        # --------Scheduled Values, injected by MSNHook--------
+        self.momentum = None
+        self.T = None  # Sharpen
         # --------init--------
         self.prototypes, self.proto_labels = self.build_prototypes(num_proto, output_dim, freeze_proto)
         self.encoder = self.backbone
@@ -67,7 +58,7 @@ class MSN(BaseModel):
         self.target_neck = copy.deepcopy(self.neck)
         for p in chain(self.target_encoder.parameters(), self.target_neck.parameters()):
             p.requires_grad = False
-        if False:  # todo: make this a hyperparameter
+        if self.sync_batchnorm:
             rank, world_size = get_dist_info()
             if world_size > 1:
                 self.encoder = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.encoder)
