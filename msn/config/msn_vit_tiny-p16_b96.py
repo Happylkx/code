@@ -54,7 +54,7 @@ if not prefetch:
 
 # dataset summary
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=96,
     workers_per_gpu=4,
     drop_last=True,
     train=dict(
@@ -197,7 +197,7 @@ log_config = dict(
                     rand_view_pipeline=rand_view_pipeline,
                     focal_view_pipeline=focal_view_pipeline,
                     epochs=runner['max_epochs'],
-                    batch_size=data['imgs_per_gpu'],
+                    batch_size=data['samples_per_gpu'],
                     optimizer=optimizer,
                     optimizer_config=optimizer_config,
                     lr_config=lr_config,

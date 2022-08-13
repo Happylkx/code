@@ -90,8 +90,6 @@ class MSN(BaseModel):
 
             if not freeze_proto:
                 prototypes.requires_grad = True
-            # logger.info(f'Created prototypes: {prototypes.shape}')
-            # logger.info(f'Requires grad: {prototypes.requires_grad}')
         return prototypes, proto_labels
 
     def extract_feat(self, imgs) -> Tuple[torch.Tensor]:
@@ -148,7 +146,7 @@ class MSN(BaseModel):
 
 
     def _get_repr_from_tuple(self, x):
-        assert isinstance(x, [tuple, list])
+        assert isinstance(x, (tuple, list))
         return x[0]
 
 

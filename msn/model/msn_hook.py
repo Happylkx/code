@@ -33,6 +33,7 @@ class MSNHook(Hook):
         self._max_iters = None
 
     def before_train_epoch(self, runner):
+        # todo: restore progress from checkpoint
         if not self._init:
             ipe = len(runner.data_loader)
             self._max_iters = ipe * runner.max_epochs
