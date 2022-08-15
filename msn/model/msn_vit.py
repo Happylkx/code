@@ -51,7 +51,7 @@ class MSNVisionTransformer(BaseBackbone):
                  conv_stem=False,
                  conv_stem_channels=None,
                  conv_stem_strides=None,
-                 out_indices=[0,],
+                 out_indices=[0, ],
                  init_cfg=None,
                  frozen_stages=-1,
                  no_final_norm=False,
@@ -60,8 +60,8 @@ class MSNVisionTransformer(BaseBackbone):
         # --------new--------
         self.init_cfg = init_cfg
         self.out_indices = out_indices
-        self.frozen_stages=frozen_stages
-        self.no_final_norm=no_final_norm
+        self.frozen_stages = frozen_stages
+        self.no_final_norm = no_final_norm
 
         # --------original--------
         self.num_features = self.embed_dim = embed_dim
@@ -89,18 +89,14 @@ class MSNVisionTransformer(BaseBackbone):
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
-
     def init_weights(self):
         # 只需要处理没有预训练模型的情况，初始化模型。加载预训练模型的逻辑mmcv已经实现了，交给BaseModule去做就好了。
-        super(MSNVisionTransformer,self).init_weights()
+        super(MSNVisionTransformer, self).init_weights()
         if not (isinstance(self.init_cfg, dict)
                 and self.init_cfg['type'] == 'Pretrained'):
             nn.init.trunc_normal_(self.pos_embed, std=.02)
             nn.init.trunc_normal_(self.cls_token, std=.02)
             self.apply(self._init_weights)
-
-
-
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -115,25 +111,11 @@ class MSNVisionTransformer(BaseBackbone):
             if isinstance(m, nn.Conv2d) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-
     def forward(self, x, patch_drop=0.):
-        if not isinstance(x, list):
-            x = [x]
-        idx_crops = torch.cumsum(torch.unique_consecutive(
-            torch.tensor([inp.shape[-1] for inp in x]),
-            return_counts=True,
-        )[1], 0)
-        start_idx = 0
-        for end_idx in idx_crops:
-            _h = self.forward_features(torch.cat(x[start_idx:end_idx]), patch_drop)
-            if start_idx == 0:
-                h = _h
-            else:
-                h = torch.cat((h, _h))
-            patch_drop = 0.
-            start_idx = end_idx
-
-        return (h,)
+        assert isinstance(x, torch.Tensor)
+        reprs = self.forward_features(x, patch_drop=patch_drop)
+        # May support multiple out_indices
+        return (reprs,)
 
     def forward_features(self, x, patch_drop):
         B = x.shape[0]
@@ -155,7 +137,7 @@ class MSNVisionTransformer(BaseBackbone):
         for blk in self.blocks:
             x = blk(x)
         if (self.norm is not None) and (not self.no_final_norm):
-            x = self.norm(x)  #3d
+            x = self.norm(x)  # 3d
         x = x[:, 0]
         return x
 
@@ -261,7 +243,6 @@ class MSNVisionTransformer(BaseBackbone):
             output.append(torch.mean(x[:, 1:], dim=1))
         return torch.cat(output, dim=-1)
 
-
     def train(self, mode=True):
         super(MSNVisionTransformer, self).train(mode)
         self._freeze_stages()
@@ -288,7 +269,6 @@ class MSNVisionTransformer(BaseBackbone):
             m.eval()
             for param in m.parameters():
                 param.requires_grad = False
-
 
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):

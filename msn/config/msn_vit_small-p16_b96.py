@@ -54,7 +54,7 @@ if not prefetch:
 
 # dataset summary
 data = dict(
-    samples_per_gpu=64,
+    samples_per_gpu=96,
     workers_per_gpu=4,
     drop_last=True,
     train=dict(
@@ -110,31 +110,7 @@ model = dict(
     ),
 )
 
-# Schedule
-
-
-# optimizer
-# TODO: param group
-"""
-param_groups = [
-        {'params': (p for n, p in encoder.named_parameters()
-                    if ('bias' not in n) and ('bn' not in n) and len(p.shape) != 1)},
-        {'params': (p for n, p in encoder.named_parameters()
-                    if ('bias' in n) or ('bn' in n) or (len(p.shape) == 1)),
-         'WD_exclude': True,
-         'weight_decay': 0}
-    ]
-    if prototypes is not None:
-        param_groups.append({
-            'params': [prototypes],
-            'lr': ref_lr,
-            'LARS_exclude': True,
-            'WD_exclude': True,
-            'weight_decay': 0
-        })
-"""
-
-# learning policy
+# Schedule learning policy
 start_lr = 0.0002
 lr = 0.001
 final_lr = 1.0e-06
@@ -148,10 +124,10 @@ lr_config = dict(
     warmup_iters=15,  # When by_epoch is set, this means the number of warmup epochs
     warmup_by_epoch=True)
 
+# optimizer
 optimizer = dict(type='AdamW', lr=lr, paramwise_options={
-    '.*(bias|bn).*': dict(WD_exclude=True, weight_decay=0),  # len(p.shape)=1怎么办？
-    '.*prototype.*': dict(lr=lr,
-                          LARS_exclude=True,
+    '.*(bias|bn|norm).*': dict(WD_exclude=True, weight_decay=0),
+    '.*prototype.*': dict(LARS_exclude=True,
                           WD_exclude=True,
                           weight_decay=0)
 })
@@ -181,28 +157,27 @@ workflow = [('train', 1)]
 persistent_workers = True
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 
-
 # yapf:disable
 log_config = dict(
     interval=50,
     hooks=[
         dict(type='TextLoggerHook'),
         dict(type='WandbLoggerHook',
-            init_kwargs=dict(
-                project='MSN Pretrain',
-                #id='2uwapqfv',
-                #resume='allow',
-                config=dict(
-                    model=model,
-                    rand_view_pipeline=rand_view_pipeline,
-                    focal_view_pipeline=focal_view_pipeline,
-                    epochs=runner['max_epochs'],
-                    batch_size=data['samples_per_gpu'],
-                    optimizer=optimizer,
-                    optimizer_config=optimizer_config,
-                    lr_config=lr_config,
-                    data_settings=data,
-                    ),
-                )
-            )
+             init_kwargs=dict(
+                 project='MSN Pretrain',
+                 # id='2uwapqfv',
+                 # resume='allow',
+                 config=dict(
+                     model=model,
+                     rand_view_pipeline=rand_view_pipeline,
+                     focal_view_pipeline=focal_view_pipeline,
+                     epochs=runner['max_epochs'],
+                     batch_size=data['samples_per_gpu'],
+                     optimizer=optimizer,
+                     optimizer_config=optimizer_config,
+                     lr_config=lr_config,
+                     data_settings=data,
+                 ),
+             )
+             )
     ])

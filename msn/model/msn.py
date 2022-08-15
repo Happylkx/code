@@ -48,13 +48,14 @@ class MSN(BaseModel):
         self.output_dim = output_dim
         self.num_proto = num_proto
         self.freeze_proto = freeze_proto
-        self.sync_batchnorm=sync_batchnorm
+        self.sync_batchnorm = sync_batchnorm
         # --------Scheduled Values, injected by MSNHook--------
         self.momentum = None
         self.T = None  # Sharpen
         # --------init--------
         self.prototypes, self.proto_labels = self.build_prototypes(num_proto, output_dim, freeze_proto)
         self.encoder = self.backbone
+        del self.backbone  # Avoid false alarm when loading checkpoint
         self.target_encoder = copy.deepcopy(self.encoder)
         self.target_neck = copy.deepcopy(self.neck)
         for p in chain(self.target_encoder.parameters(), self.target_neck.parameters()):
@@ -75,7 +76,8 @@ class MSN(BaseModel):
                 prototypes = torch.empty(num_proto, output_dim)
                 _sqrt_k = (1. / output_dim) ** 0.5
                 torch.nn.init.uniform_(prototypes, -_sqrt_k, _sqrt_k)
-                prototypes = torch.nn.parameter.Parameter(prototypes)  # Convert this to Parameter, otherwise it cannot be recognized by frameworks for saving, etc.
+                prototypes = torch.nn.parameter.Parameter(
+                    prototypes)  # Convert this to Parameter, otherwise it cannot be recognized by frameworks for saving, etc.
 
                 # -- init prototype labels
                 proto_labels = one_hot(torch.tensor([i for i in range(num_proto)]), num_proto)
@@ -91,17 +93,45 @@ class MSN(BaseModel):
         Returns:
             Tuple[torch.Tensor]: backbone outputs.
         """
-        return self.backbone(imgs, patch_drop=self.patch_drop)
+        # return self.backbone(imgs, patch_drop=self.patch_drop)
+        raise NotImplementedError()
+
+    def forward_multiple_sizes(self, x, encoder, patch_drop=0.) -> list:
+        if not isinstance(x, list):
+            x = [x]
+        idx_crops = torch.cumsum(torch.unique_consecutive(
+            torch.tensor([inp.shape[-1] for inp in x]),
+            return_counts=True,
+        )[1], 0)
+        results = []
+        start_idx = 0
+        for end_idx in idx_crops:
+            h = encoder(torch.cat(x[start_idx:end_idx]), patch_drop)
+            results.append(h)
+            # only rand views need patch_drop
+            patch_drop = 0.
+            start_idx = end_idx
+
+        return results
+
+    def _forward_neck(self, x: list, neck):
+        # x:[(repr,), (repr,), ...], each tuple is a repr list of rand/focal view
+        assert isinstance(x, list) and isinstance(x[0], tuple)
+        z = None
+        for reps in x:
+            batch = self._get_repr_from_tuple(reps)
+            _z = neck(batch)
+            if z is not None:
+                z = torch.cat((z, _z))
+            else:
+                z = _z
+        return z
 
     def forward_train(self, imgs: list, **kwargs):
         # Move proto_labels to according device
         if not (self.proto_labels.device == imgs[0].device):
             self.proto_labels = self.proto_labels.to(imgs[0].device)
 
-        '''def load_imgs():
-            # -- unsupervised imgs
-            imgs = [u.to(device, non_blocking=True) for u in udata]
-            return imgs'''
         # Step 0(5). momentum update of target encoder
         self._momentum_update(self.encoder, self.target_encoder)
         self._momentum_update(self.neck, self.target_neck)
@@ -109,13 +139,14 @@ class MSN(BaseModel):
         # Get representations of target view h, and anchor view z
         # h: representations of 'imgs' before head
         # z: representations of 'imgs' after head
-        # -- If use_pred_head=False, then encoder.pred (prediction
-        #    head) is None, and _forward_head just returns the
-        #    identity, z=h
+
         # Encoder returns a tuple, (representations, )
-        z = self.neck(self._get_repr_from_tuple(self.encoder(imgs[1:], patch_drop=self.patch_drop)))
+        reprs = self.forward_multiple_sizes(imgs[1:], self.encoder, patch_drop=self.patch_drop)
+        z = self._forward_neck(reprs, self.neck)
         with torch.no_grad():
-            h = self.target_neck(self._get_repr_from_tuple(self.target_encoder(imgs[0])))
+            # target views do not need drop_patch
+            a = self.target_encoder(imgs[0])
+            h = self.target_neck(self._get_repr_from_tuple(a))
 
         # Step 1. convert representations to fp32
         h, z = h.float(), z.float()
@@ -136,11 +167,9 @@ class MSN(BaseModel):
 
         return losses
 
-
     def _get_repr_from_tuple(self, x):
         assert isinstance(x, (tuple, list))
         return x[0]
-
 
     def forward_test(self, x):
         raise NotImplementedError()

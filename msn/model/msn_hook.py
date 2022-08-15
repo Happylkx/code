@@ -6,10 +6,8 @@ from mmcv.runner import HOOKS, Hook
 @HOOKS.register_module()
 class MSNHook(Hook):
     """Hook for MSN.
-    This hook is for MSN to achieve momentum(for target encoder) and 
-    sharpen temperature scheduler .
-    Args:
-
+    This hook is for MSN to schedule momentum(for target encoder),
+    sharpen temperature and weight decay.
     """
 
     def __init__(self,
@@ -33,21 +31,26 @@ class MSNHook(Hook):
         self._max_iters = None
 
     def before_train_epoch(self, runner):
-        # todo: restore progress from checkpoint
         if not self._init:
             ipe = len(runner.data_loader)
             self._max_iters = ipe * runner.max_epochs
             self._init = True
-            
 
     def before_train_iter(self, runner):
-        assert self._init, "MSNHook scheduler not initialized."
         model = runner.model.module  # runner.model->MMDataParallel
         assert 'MSN' in str(type(model))
 
         model.T = self.get_sharpen_temperature(runner.iter)
         model.momentum = self.get_momentum(runner.iter)
         self._step_weight_decay(runner, self.get_weight_decay(runner.iter))
+        new_wd = self._step_weight_decay(runner, self.get_weight_decay(runner.iter))
+
+        # Add to logger
+        runner.log_buffer.update({
+            'sharpen_temperature': model.T,
+            'encoder_momentum': model.momentum,
+            'weight_decay': new_wd
+        })
 
     def get_momentum(self, iter):
         increment = (self.final_momentum - self.start_momentum) / (self._max_iters * 1.25)
